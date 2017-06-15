@@ -8,11 +8,14 @@ int main(int argc, char **argv) {
     unsigned int j;
     redisContext *c;
     redisReply *reply;
-    const char *hostname = (argc > 1) ? argv[1] : "127.0.0.1";
-    int port = (argc > 2) ? atoi(argv[2]) : 6379;
+    const char *hostnames[] = {"zoom", "booom", "localhost", "johnny", "test"};
+    const int ports[] = {4,4,26379,2,3};
+    redisSentinelContext *sc;
+
+    sc = redisSentinelInit("mymaster", hostnames, ports, 5);
 
     struct timeval timeout = { 1, 500000 }; // 1.5 seconds
-    c = redisConnectWithTimeout(hostname, port, timeout);
+    c = redisSentinelConnect(sc);
     if (c == NULL || c->err) {
         if (c) {
             printf("Connection error: %s\n", c->errstr);
@@ -73,6 +76,9 @@ int main(int argc, char **argv) {
 
     /* Disconnects and frees the context */
     redisFree(c);
+
+    /* Free SentinelContext */
+    redisSentinelFree(sc);
 
     return 0;
 }
