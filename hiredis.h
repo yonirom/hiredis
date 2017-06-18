@@ -216,32 +216,6 @@ void *redisvCommand(redisContext *c, const char *format, va_list ap);
 void *redisCommand(redisContext *c, const char *format, ...);
 void *redisCommandArgv(redisContext *c, int argc, const char **argv, const size_t *argvlen);
 
-#define MAX_HOSTNAME_LEN 255
-
-typedef struct sentinelList {
-    char hostname[MAX_HOSTNAME_LEN];
-    int port;
-    struct sentinelList *next;
-} sentinelList;
-
-/* Context for Redis Sentinels */
-typedef struct redisSentinelContext {
-    int err; /* Error flags, 0 when there is no error */
-    char errstr[128]; /* String representation of error when applicable */
-    int flags;
-    struct timeval *timeout;
-    redisContext *c;
-
-    sentinelList *list;
-    char cluster[256];
-
-} redisSentinelContext;
-
-
-void redisSentinelFree(redisSentinelContext *c);
-redisSentinelContext *redisSentinelInit(const char *cluster, const char **hostname, const int *port, int len);
-redisContext *redisSentinelConnect(redisSentinelContext *c);
-
 #ifdef __cplusplus
 }
 #endif

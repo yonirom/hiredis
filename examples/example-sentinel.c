@@ -3,19 +3,25 @@
 #include <string.h>
 
 #include <hiredis.h>
+#include "../sentinel.h"
 
 int main(int argc, char **argv) {
     unsigned int j;
     redisContext *c;
     redisReply *reply;
-    const char *hostnames[] = {"zoom", "booom", "localhost", "johnny", "test"};
+    const char *hostnames[] = {"192.168.1.1", "192.168.1.5", "localhost", "192.168.1.1", "192.168.1.1"};
     const int ports[] = {4,4,26379,2,3};
     redisSentinelContext *sc;
 
     sc = redisSentinelInit("mymaster", hostnames, ports, 5);
 
     struct timeval timeout = { 1, 500000 }; // 1.5 seconds
-    c = redisSentinelConnect(sc);
+    if (redisSentinelConnect(sc) != REDIS_CONNECTED) {
+        printf("Sentinel connection error: %s\n", sc->errstr);
+        exit(1);
+    }
+    c = redisSentinelGetRedisContext(sc);
+
     if (c == NULL || c->err) {
         if (c) {
             printf("Connection error: %s\n", c->errstr);

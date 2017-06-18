@@ -1,8 +1,9 @@
 #include "sentinel.h"
 
-static void _free_sentinel_list(sentinelList **head)
+/* Sentinel linked list helpers */
+static void _free_sentinel_list(redisSentinelList **head)
 {
-    sentinelList *iter, *next;
+    redisSentinelList *iter, *next;
     iter = *head;
 
     while (iter)
@@ -14,15 +15,15 @@ static void _free_sentinel_list(sentinelList **head)
     *head = NULL;
 }
 
-static void _push_sentinel(sentinelList **head, const char *hostname, int port)
+static void _push_sentinel(redisSentinelList **head, const char *hostname, int port)
 {
-    sentinelList *new;
-    sentinelList *iter;
+    redisSentinelList *new;
+    redisSentinelList *iter;
 
-    new = (sentinelList *)malloc(sizeof(sentinelList));
+    new = (redisSentinelList *)malloc(sizeof(redisSentinelList));
+    strncpy(new->hostname, hostname, MAX_HOSTNAME_LEN);
     new->port = port;
     new->next = NULL;
-    strncpy(new->hostname, hostname, MAX_HOSTNAME_LEN);
 
     if (*head == NULL)
     {
@@ -37,9 +38,9 @@ static void _push_sentinel(sentinelList **head, const char *hostname, int port)
     iter->next = new;
 }
 
-static void _promote_sentinel(sentinelList **head, sentinelList *item)
+static void _promote_sentinel(redisSentinelList **head, redisSentinelList *item)
 {
-    sentinelList *iter;
+    redisSentinelList *iter;
 
     if (*head == item)
         return;
@@ -53,85 +54,91 @@ static void _promote_sentinel(sentinelList **head, sentinelList *item)
     item->next = *head;
     *head = item;
 }
+/* End of sentinel linked list helpers */
 
-/*
-static void print_list(sentinelList *head)
-{
-    while (head)
-    {
-        printf("%s %d\n", head->hostname, head->port);
-        head = head->next;
-    }
-    printf("--\n");
+
+/* We want the error field to be accessible directly instead of requiring
+ * an indirection to the redisContext struct. */
+static void __redisSentinelCopyError(redisSentinelContext *sc) {
+    if (!sc)
+        return;
+
+    redisContext *c = sc->c;
+    sc->err = c->err;
+    strncpy(sc->errstr, c->errstr, 128);
 }
-*/
 
 static redisSentinelContext *_redisSentinelContextInit(void) {
-    redisSentinelContext *c;
+    redisSentinelContext *sc;
 
-    c = (redisSentinelContext *)calloc(1,sizeof(redisSentinelContext));
-    if (c == NULL)
+    sc = (redisSentinelContext *)calloc(1,sizeof(redisSentinelContext));
+    if (sc == NULL)
         return NULL;
 
-    c->err = 0;
-    c->errstr[0] = '\0';
-    c->timeout = NULL;
-    c->list = NULL;
+    sc->err = 0;
+    sc->errstr[0] = '\0';
+    sc->timeout = NULL;
+    sc->list = NULL;
 
-    return c;
+    return sc;
 }
 
 redisSentinelContext *redisSentinelInit(const char *cluster, const char **hostnames, const int *ports, int len)
 {
-    redisSentinelContext *c;
+    redisSentinelContext *sc;
     struct timeval tv = { 0, 100000 };
     int i;
 
-    c = _redisSentinelContextInit();
-    if (c == NULL)
+    sc = _redisSentinelContextInit();
+    if (sc == NULL)
         return NULL;
 
     for (i=0; i < len; i++)
-        _push_sentinel(&(c->list), hostnames[i], ports[i]);
+        _push_sentinel(&(sc->list), hostnames[i], ports[i]);
 
-    if (c->timeout == NULL)
-        c->timeout = malloc(sizeof(struct timeval));
-    memcpy(c->timeout, &tv, sizeof(struct timeval));
+    if (sc->timeout == NULL)
+        sc->timeout = (struct timeval *)malloc(sizeof(struct timeval));
+    memcpy(sc->timeout, &tv, sizeof(struct timeval));
 
-    strncpy(c->cluster, cluster, sizeof(c->cluster));
+    strncpy(sc->cluster, cluster, sizeof(sc->cluster));
 
-    return c;
+    return sc;
 }
 
-void redisSentinelFree(redisSentinelContext *c)
+void redisSentinelFree(redisSentinelContext *sc)
 {
     // XXX We do not free the redisContext. This is the responsibility of the
     // user
-    if (c == NULL)
+    if (sc == NULL)
         return;
-    if (c->list)
-        _free_sentinel_list(&c->list);
-    if (c->timeout)
-        free(c->timeout);
-    free(c);
+    if (sc->list)
+        _free_sentinel_list(&sc->list);
+    if (sc->timeout)
+        free(sc->timeout);
+    free(sc);
 }
 
-redisContext *redisSentinelConnect(redisSentinelContext *c)
+redisContext *redisSentinelGetRedisContext(redisSentinelContext *sc)
+{
+    return sc->c;
+}
+
+int redisSentinelConnect(redisSentinelContext *sc)
 {
     redisReply *reply = NULL;
-    sentinelList dummy;
-    sentinelList *iter = &dummy;
+    redisSentinelList dummy;
+    redisSentinelList *iter = &dummy;
 
-    iter->next = c->list;
+    iter->next = sc->list;
 
     while ((iter = iter->next))
     {
-        printf("looping with %s %d\n", iter->hostname, iter->port);
-        c->c = redisConnectWithTimeout(iter->hostname, iter->port, *c->timeout);
-        if (c->c == NULL || c->c->err)
+        printf("trying %s %d\n", iter->hostname, iter->port);
+        sc->c = redisConnectWithTimeout(iter->hostname, iter->port, *sc->timeout);
+        if (sc->c == NULL || sc->c->err)
             goto next;
 
-        reply = (redisReply *)redisCommand(c->c,"SENTINEL get-master-addr-by-name %s", c->cluster);
+        reply = (redisReply *)redisCommand(sc->c,"SENTINEL get-master-addr-by-name %s", sc->cluster);
 
         if (reply->type == REDIS_REPLY_NIL)
             goto next;
@@ -139,33 +146,37 @@ redisContext *redisSentinelConnect(redisSentinelContext *c)
         if (reply->type == REDIS_REPLY_ARRAY && reply->elements == 2)
         {
             // try to connect to actual redis
-            redisFree(c->c);
-            c->c = redisConnectWithTimeout(reply->element[0]->str, atoi(reply->element[1]->str), *c->timeout);
-            if (c->c == NULL || c->c->err)
+            redisFree(sc->c);
+            sc->c = redisConnectWithTimeout(reply->element[0]->str, atoi(reply->element[1]->str), *sc->timeout);
+            if (sc->c == NULL || sc->c->err)
                 goto next;
 
             freeReplyObject(reply);
-            reply = (redisReply *)redisCommand(c->c,"ROLE");
+            reply = (redisReply *)redisCommand(sc->c,"ROLE");
 
             if (reply->type == REDIS_REPLY_ARRAY && !strncmp("master", reply->element[0]->str, 7))
             {
                 //Success
                 freeReplyObject(reply);
-                _promote_sentinel(&c->list, iter);
+                _promote_sentinel(&sc->list, iter);
                 break;
             }
 
         next:
             freeReplyObject(reply);
-            redisFree(c->c);
-            c->c = NULL;
+            __redisSentinelCopyError(sc);
+            redisFree(sc->c);
+            sc->c = NULL;
         }
     }
-    printf("done. context is: %p\n", (void *)c->c);
-    return c->c;
+    printf("done. context is: %p\n", (void *)sc->c);
+    return sc->c ? REDIS_CONNECTED : REDIS_ERR;
 }
 
-
+int redisSentinelReconnect(redisSentinelContext *sc)
+{
+    return redisSentinelConnect(sc);
+}
 
 
 
