@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "hiredis.h"
+#include "async.h"
 
 #define MAX_HOSTNAME_LEN 255
 
@@ -23,21 +24,21 @@ typedef struct redisSentinelList {
 typedef struct redisSentinelContext {
     int err; /* Error flags, 0 when there is no error */
     char errstr[128]; /* String representation of error when applicable */
-    int flags;
+    char cluster[256];
     struct timeval *timeout;
     redisContext *c;
+    redisAsyncContext *ac;
 
     redisSentinelList *list;
-    char cluster[256];
 
 } redisSentinelContext;
 
 
 void redisSentinelFree(redisSentinelContext *sc);
 redisSentinelContext *redisSentinelInit(const char *cluster, const char **hostname, const int *port, int len);
-int redisSentinelConnect(redisSentinelContext *sc);
-int redisSentinelReconnect(redisSentinelContext *sc);
-redisContext *redisSentinelGetRedisContext(redisSentinelContext *sc);
+redisContext *redisSentinelConnect(redisSentinelContext *sc);
+redisContext *redisSentinelReconnect(redisSentinelContext *sc);
+redisAsyncContext *redisSentinelAsyncConnect(redisSentinelContext *sc);
 
 #ifdef __cplusplus
 }

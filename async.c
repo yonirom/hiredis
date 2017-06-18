@@ -102,10 +102,10 @@ static dictType callbackDict = {
     callbackValDestructor
 };
 
-static redisAsyncContext *redisAsyncInitialize(redisContext *c) {
+redisAsyncContext *redisAsyncInitialize(redisContext *c) {
     redisAsyncContext *ac;
 
-    ac = realloc(c,sizeof(redisAsyncContext));
+    ac = (redisAsyncContext *)realloc(c,sizeof(redisAsyncContext));
     if (ac == NULL)
         return NULL;
 

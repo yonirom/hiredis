@@ -16,12 +16,7 @@ int main(int argc, char **argv) {
     sc = redisSentinelInit("mymaster", hostnames, ports, 5);
 
     struct timeval timeout = { 1, 500000 }; // 1.5 seconds
-    if (redisSentinelConnect(sc) != REDIS_CONNECTED) {
-        printf("Sentinel connection error: %s\n", sc->errstr);
-        exit(1);
-    }
-    c = redisSentinelGetRedisContext(sc);
-
+    c = redisSentinelConnect(sc);
     if (c == NULL || c->err) {
         if (c) {
             printf("Connection error: %s\n", c->errstr);
@@ -82,6 +77,13 @@ int main(int argc, char **argv) {
 
     /* Disconnects and frees the context */
     redisFree(c);
+
+    c = redisSentinelReconnect(sc);
+
+    /* PING server */
+    reply = redisCommand(c,"PING");
+    printf("PING: %s\n", reply->str);
+    freeReplyObject(reply);
 
     /* Free SentinelContext */
     redisSentinelFree(sc);

@@ -57,17 +57,6 @@ static void _promote_sentinel(redisSentinelList **head, redisSentinelList *item)
 /* End of sentinel linked list helpers */
 
 
-/* We want the error field to be accessible directly instead of requiring
- * an indirection to the redisContext struct. */
-static void __redisSentinelCopyError(redisSentinelContext *sc) {
-    if (!sc)
-        return;
-
-    redisContext *c = sc->c;
-    sc->err = c->err;
-    strncpy(sc->errstr, c->errstr, 128);
-}
-
 static redisSentinelContext *_redisSentinelContextInit(void) {
     redisSentinelContext *sc;
 
@@ -86,7 +75,7 @@ static redisSentinelContext *_redisSentinelContextInit(void) {
 redisSentinelContext *redisSentinelInit(const char *cluster, const char **hostnames, const int *ports, int len)
 {
     redisSentinelContext *sc;
-    struct timeval tv = { 0, 100000 };
+    struct timeval tv = { 0, 200000 };
     int i;
 
     sc = _redisSentinelContextInit();
@@ -118,12 +107,7 @@ void redisSentinelFree(redisSentinelContext *sc)
     free(sc);
 }
 
-redisContext *redisSentinelGetRedisContext(redisSentinelContext *sc)
-{
-    return sc->c;
-}
-
-int redisSentinelConnect(redisSentinelContext *sc)
+redisContext *redisSentinelConnect(redisSentinelContext *sc)
 {
     redisReply *reply = NULL;
     redisSentinelList dummy;
@@ -164,43 +148,44 @@ int redisSentinelConnect(redisSentinelContext *sc)
 
         next:
             freeReplyObject(reply);
-            __redisSentinelCopyError(sc);
             redisFree(sc->c);
             sc->c = NULL;
         }
     }
     printf("done. context is: %p\n", (void *)sc->c);
-    return sc->c ? REDIS_CONNECTED : REDIS_ERR;
+    return sc->c;
 }
 
-int redisSentinelReconnect(redisSentinelContext *sc)
+redisAsyncContext *redisSentinelAsyncConnect(redisSentinelContext *sc)
 {
-    return redisSentinelConnect(sc);
+    redisContext *c;
+    c = redisSentinelConnect(sc);
+
+    if (c == NULL)
+        return NULL;
+
+    c->flags &= ~REDIS_BLOCK;
+    sc->ac = redisAsyncInitialize(c);
+
+    if (sc->ac == NULL) {
+        redisFree(c);
+        return NULL;
+    }
+
+    return sc->ac;
 }
 
 
-
-/*
-int main(int argc, char *argv[])
+redisContext *redisSentinelReconnect(redisSentinelContext *sc)
 {
-    char *hostnames[] = {"zoom", "booom", "localhost", "johnny", "test"};
-    int ports[] = {4,4,26379,2,3};
-    (void) argc;
-    (void) argv;
-    redisSentinelContext *c;
-    redisContext *rc;
+    return  redisSentinelConnect(sc);
+}
 
-    c = redisSentinelInit(hostnames, ports, 5);
-
-    print_list(c->list);
-
-    //_promote_sentinel(&list, list->next);
-
-
-    rc = redisSentinelConnect(c);
-    if (rc) printf("%d %s\n", rc->err, rc->errstr);
-    print_list(c->list);
-    return 0;
+/* Not implemented in hiredis
+int redisSentinelAsyncReconnect(redisSentinelContext *sc)
+{
+    redisAsyncContext *ac;
+    ac = redisSentinelAsyncConnect(sc);
+    return ac == NULL ? REDIS_ERR : REDIS_OK;
 }
 */
-
