@@ -9,8 +9,8 @@ int main(int argc, char **argv) {
     unsigned int j;
     redisContext *c;
     redisReply *reply;
-    const char *hostnames[] = {"192.168.1.1", "192.168.1.5", "localhost", "192.168.1.1", "192.168.1.1"};
-    const int ports[] = {4,4,26379,2,3};
+    const char *hostnames[] = {"192.168.1.1", "192.168.1.5", "localhost", "172.18.0.4", "192.168.1.1"};
+    const int ports[] = {4,4,26379,26379,3};
     redisSentinelContext *sc;
 
     sc = redisSentinelInit("mymaster", hostnames, ports, 5);
