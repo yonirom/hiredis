@@ -117,12 +117,18 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
         printf("trying %s %d\n", iter->hostname, iter->port);
         sc->c = redisConnectWithTimeout(iter->hostname, iter->port, *sc->timeout);
         if (sc->c == NULL || sc->c->err)
-            goto next;
+        {
+            redisFree(sc->c);
+            continue;
+        }
 
         reply = (redisReply *)redisCommand(sc->c,"SENTINEL get-master-addr-by-name %s", sc->cluster);
 
         if (reply->type == REDIS_REPLY_NIL)
-            goto next;
+        {
+            freeReplyObject(reply);
+            continue;
+        }
 
         if (reply->type == REDIS_REPLY_ARRAY && reply->elements == 2)
         {
@@ -130,7 +136,10 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
             redisFree(sc->c);
             sc->c = redisConnectWithTimeout(reply->element[0]->str, atoi(reply->element[1]->str), *sc->timeout);
             if (sc->c == NULL || sc->c->err)
-                goto next;
+            {
+                redisFree(sc->c);
+                continue;
+            }
 
             freeReplyObject(reply);
             reply = (redisReply *)redisCommand(sc->c,"ROLE");
@@ -140,16 +149,15 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
                 //Success
                 freeReplyObject(reply);
                 _promote_sentinel(&sc->list, iter);
-                break;
+                printf("done. context is: %p\n", (void *)sc->c);
+                return sc->c;
             }
-
-        next:
-            freeReplyObject(reply);
-            redisFree(sc->c);
-            sc->c = NULL;
         }
     }
-    printf("done. context is: %p\n", (void *)sc->c);
+    printf("failed. context is: %p\n", (void *)sc->c);
+    sc->c = (redisContext *)calloc(1, sizeof(redisContext));
+    sc->c->err = REDIS_ERR;
+    strncpy(sc->c->errstr, "Failed to connect to sentinels", 128);
     return sc->c;
 }
 
