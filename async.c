@@ -68,7 +68,7 @@ static unsigned int callbackHash(const void *key) {
 
 static void *callbackValDup(void *privdata, const void *src) {
     ((void) privdata);
-    redisCallback *dup = malloc(sizeof(*dup));
+    redisCallback *dup = (redisCallback *)malloc(sizeof(*dup));
     memcpy(dup,src,sizeof(*dup));
     return dup;
 }
@@ -102,7 +102,7 @@ static dictType callbackDict = {
     callbackValDestructor
 };
 
-redisAsyncContext *redisAsyncInitialize(redisContext *c) {
+static redisAsyncContext *redisAsyncInitialize(redisContext *c) {
     redisAsyncContext *ac;
 
     ac = (redisAsyncContext *)realloc(c,sizeof(redisAsyncContext));
@@ -684,4 +684,10 @@ int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *priv
 int redisAsyncFormattedCommand(redisAsyncContext *ac, redisCallbackFn *fn, void *privdata, const char *cmd, size_t len) {
     int status = __redisAsyncCommand(ac,fn,privdata,cmd,len);
     return status;
+}
+
+redisAsyncContext *redisAsyncUpgradeContext(redisContext *c) {
+    if (redisUpgradeToNonBlocking(c))
+      return NULL;
+    return redisAsyncInitialize(c);
 }

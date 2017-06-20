@@ -125,6 +125,11 @@ static int redisSetBlocking(redisContext *c, int blocking) {
     return REDIS_OK;
 }
 
+int redisUpgradeToNonBlocking(redisContext *c) {
+    c->flags &= ~REDIS_BLOCK;
+    return redisSetBlocking(c, 1);
+}
+
 int redisKeepAlive(redisContext *c, int interval) {
     int val = 1;
     int fd = c->fd;

@@ -58,12 +58,13 @@ int main (int argc, char **argv) {
     redisAsyncSetDisconnectCallback(c,disconnectCallback);
     redisAsyncCommand(c, NULL, NULL, "SET key %b", argv[argc-1], strlen(argv[argc-1]));
     redisAsyncCommand(c, getCallback, (char*)"end-1", "blpop sleep 10");
+    redisAsyncCommand(c, getCallback, (char*)"end-2", "blpop sleep 5");
     printf("cont...\n");
     ac = redisSentinelAsyncConnect(sc);
     redisLibeventAttach(ac,base);
     redisAsyncSetConnectCallback(ac,connectCallback);
     redisAsyncSetDisconnectCallback(ac,disconnectCallback);
-    redisAsyncCommand(ac, getCallback, (char*)"end-1", "blpop sleep 10");
+    redisAsyncCommand(ac, getCallback, (char*)"end-3", "blpop sleep 7");
     printf("cont...2\n");
     event_base_dispatch(base);
     return 0;

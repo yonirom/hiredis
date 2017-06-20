@@ -17,17 +17,16 @@ static void _free_sentinel_list(redisSentinelList **head)
 
 static void _push_sentinel(redisSentinelList **head, const char *hostname, int port)
 {
-    redisSentinelList *new;
-    redisSentinelList *iter;
+    redisSentinelList *item, *iter;
 
-    new = (redisSentinelList *)malloc(sizeof(redisSentinelList));
-    strncpy(new->hostname, hostname, MAX_HOSTNAME_LEN);
-    new->port = port;
-    new->next = NULL;
+    item = (redisSentinelList *)malloc(sizeof(redisSentinelList));
+    strncpy(item->hostname, hostname, MAX_HOSTNAME_LEN);
+    item->port = port;
+    item->next = NULL;
 
     if (*head == NULL)
     {
-        *head = new;
+        *head = item;
         return;
     }
 
@@ -35,7 +34,7 @@ static void _push_sentinel(redisSentinelList **head, const char *hostname, int p
 
     while (iter->next)
         iter = iter->next;
-    iter->next = new;
+    iter->next = item;
 }
 
 static void _promote_sentinel(redisSentinelList **head, redisSentinelList *item)
@@ -96,8 +95,6 @@ redisSentinelContext *redisSentinelInit(const char *cluster, const char **hostna
 
 void redisSentinelFree(redisSentinelContext *sc)
 {
-    // XXX We do not free the redisContext. This is the responsibility of the
-    // user
     if (sc == NULL)
         return;
     if (sc->list)
@@ -164,8 +161,7 @@ redisAsyncContext *redisSentinelAsyncConnect(redisSentinelContext *sc)
     if (c == NULL)
         return NULL;
 
-    c->flags &= ~REDIS_BLOCK;
-    sc->ac = redisAsyncInitialize(c);
+    sc->ac = redisAsyncUpgradeContext(c);
 
     if (sc->ac == NULL) {
         redisFree(c);
