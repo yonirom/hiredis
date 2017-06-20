@@ -149,11 +149,15 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
                 //Success
                 freeReplyObject(reply);
                 _promote_sentinel(&sc->list, iter);
-                break;
+                printf("done. context is: %p\n", (void *)sc->c);
+                return sc->c;
             }
         }
     }
-    printf("done. context is: %p\n", (void *)sc->c);
+    printf("failed. context is: %p\n", (void *)sc->c);
+    sc->c = (redisContext *)calloc(1, sizeof(redisContext));
+    sc->c->err = REDIS_ERR;
+    strncpy(sc->c->errstr, "Failed to connect to sentinels", 128);
     return sc->c;
 }
 
