@@ -109,12 +109,12 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
     redisReply *reply = NULL;
     redisSentinelList dummy;
     redisSentinelList *iter = &dummy;
+    int sentinel_connects = 0;
 
     iter->next = sc->list;
 
     while ((iter = iter->next))
     {
-        printf("trying %s %d\n", iter->hostname, iter->port);
         sc->c = redisConnectWithTimeout(iter->hostname, iter->port, *sc->timeout);
         if (sc->c == NULL || sc->c->err)
         {
@@ -122,6 +122,7 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
             continue;
         }
 
+        sentinel_connects++;
         reply = (redisReply *)redisCommand(sc->c,"SENTINEL get-master-addr-by-name %s", sc->cluster);
 
         if (reply->type == REDIS_REPLY_NIL)
@@ -149,15 +150,16 @@ redisContext *redisSentinelConnect(redisSentinelContext *sc)
                 //Success
                 freeReplyObject(reply);
                 _promote_sentinel(&sc->list, iter);
-                printf("done. context is: %p\n", (void *)sc->c);
                 return sc->c;
             }
         }
     }
-    printf("failed. context is: %p\n", (void *)sc->c);
     sc->c = (redisContext *)calloc(1, sizeof(redisContext));
     sc->c->err = REDIS_ERR;
-    strncpy(sc->c->errstr, "Failed to connect to sentinels", 128);
+    if (sentinel_connects)
+      snprintf(sc->c->errstr, 128, "Failed to connect to a master. %d sentinel(s) connected", sentinel_connects);
+    else
+      snprintf(sc->c->errstr, 128, "Failed to connect to any sentinels");
     return sc->c;
 }
 
